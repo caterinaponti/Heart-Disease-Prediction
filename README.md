@@ -45,6 +45,9 @@ We analyzed the Data of Patients ( For Medical Field ) data set in Kaggle <https
 
 From this experience, we learned the importance of performing Random Forest Regression for variable importance before fitting a Logistic Regression Model. The Random Forest method helped us identify which variables contributed most to predicting heart attacks, providing valuable insights. Additionally, hierarchical clustering allowed us to better understand the relationships between features and how they grouped in the data.
 
+![VariablesImportance](https://github.com/user-attachments/assets/d3191b51-6e5e-42a6-961a-910277949230)
+
+
 Regarding the dataset, we observed that fitting the model with all the variables gave us an accuracy of 0.79. However, the model's performance did not change significantly when we fitted it with only the most 5 important variables.
 
 -   Accuracy with 'HadAngina': 0.73
