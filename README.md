@@ -55,6 +55,9 @@ This demonstrates that while 'HadAngina' is a strong predictor, other variables 
 
 Additionally, after performing hierchical clustering, we noticed that Cluster 4 had the highest proportion of heart attack cases and features in the cluster included: most individual had ChestScan, majority did not have a stroke but experienced difficulty in walking, and HadAngina and AgeCategory were key features.
 
+![HierarchicalClusteringwithHeartAttack](https://github.com/user-attachments/assets/aca80a76-6e81-422f-a25c-d466dfdbf0a6)
+
+
 **What more could you do with this project in the future?**
 
 In the future, there are two directions to explore:
