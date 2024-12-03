@@ -1,0 +1,438 @@
+library(readxl)
+file.exists("/Users/caterinaponti/Desktop/BSDS100/Patients Data ( Used for Heart Disease Prediction ) 2.xlsx")
+data <- read_excel("/Users/caterinaponti/Desktop/BSDS100/Patients Data ( Used for Heart Disease Prediction ) 2.xlsx")
+
+head(data)
+names(data)
+
+library(ggplot2)
+library(dplyr)
+
+patients_df <- data %>%
+  mutate(HadDiabetes = ifelse(HadDiabetes == "Yes", 1, 0))
+
+age_diabetes_risk <- aggregate(HadHeartAttack ~ AgeCategory + HadDiabetes, data = patients_df, FUN = mean)
+
+# Plot the average risk by age category and diabetes status
+ggplot(age_diabetes_risk, aes(x = factor(AgeCategory), y = HadHeartAttack, fill = factor(HadDiabetes))) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  labs(
+    title = "Average Risk of Heart Attack by Age Range and Diabetes Status",
+    x = "Age Range",
+    y = "Average Risk of Heart Attack",
+    fill = "Had Diabetes"
+  ) +
+  scale_fill_manual(values = c("steelblue", "tomato")) +  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#Stacked Bar Plot for Health Conditions by Sex
+ggplot(data, aes(x=factor(Sex), fill = factor(HadHeartAttack))) + geom_bar(position="stack") + labs(title= "Had Heart Attack by Sex", x = "Sex", fill= "Had Heart Attack")
+
+
+library(pheatmap) # For melting the correlation matrix
+library(dplyr)
+library(reshape2)
+
+df_numeric <- data[sapply(data, is.numeric)]
+
+corr <- cor(df_numeric)
+
+corr_melted <- melt(corr)
+
+# Plot the heatmap
+pheatmap(corr, 
+         color = colorRampPalette(c("blue", "white", "red"))(50), 
+         display_numbers = TRUE,   
+         fontsize_number = 10,    
+         main = "Correlation Heatmap with Values")
+
+
+#who had a heart attack 
+class_counts <- table(data$HadHeartAttack)
+print(class_counts)
+
+class_0 <- data %>% filter(HadHeartAttack == 0)
+class_1 <- data %>% filter(HadHeartAttack == 1)
+
+class_0_downsampled <- class_0[sample(nrow(class_0), size = nrow(class_1)), ]
+
+balanced_data <- bind_rows(class_0_downsampled, class_1)
+
+table(balanced_data$HadHeartAttack)
+
+#Facet Grid for BMI by Smoking Status and Health Conditions
+ggplot(balanced_data, aes(x=BMI, fill=factor(SmokerStatus))) + geom_histogram(bins=20) + facet_wrap(~ factor(HadHeartAttack)) + labs(
+  title="BMI Distribution by Smoking Status and Heart Attack", 
+  x = "BMI", 
+  fill = "Smoking Status"
+)
+
+#Variables Importnace with Random Forest Regression
+library(randomForest)
+library(varImp)
+
+balanced_data$HadHeartAttack <- as.factor(balanced_data$HadHeartAttack)
+balanced_data <- subset(balanced_data, select=-c(PatientID, State))
+
+rf_model <- randomForest(HadHeartAttack ~ ., data = balanced_data, importance = TRUE, mtry=6, ntree=100)
+
+importance_values <- importance(rf_model)
+
+sorted_by_accuracy <- importance_values[order(-importance_values[, "MeanDecreaseAccuracy"]), ]
+
+varImpPlot(rf_model, n.var = 15, main="Variables Importance in Predicting Heart Attack")
+
+
+#CORRELATIONS
+subset_data <- df_numeric[,c( 'HadHeartAttack', 'HadArthritis', 'DeafOrHardOfHearing', 'BMI','HadAngina', 'HadStroke', 'HadAsthma', 'HadCOPD','DifficultyConcentrating', 'DifficultyWalking', 'ChestScan', 'HighRiskLastYear', 'AlcoholDrinkers','CovidPos' )]
+
+corr <- cor(subset_data)
+
+corr_melted <- melt(corr)
+
+# Plot the heatmap
+pheatmap(corr, 
+         color = colorRampPalette(c("blue", "white", "red"))(50), 
+         display_numbers = TRUE,   
+         fontsize_number = 10,    
+         main = "Correlation Heatmap with Values")
+
+
+subset_data2 <- balanced_data[,c('DifficultyConcentrating', 'DifficultyWalking',
+                                 'DifficultyDressingBathing', 'DifficultyErrands','ChestScan','HighRiskLastYear', 'CovidPos','AlcoholDrinkers', 'HIVTesting', 'FluVaxLast12', 'PneumoVaxEver')]
+
+corr <- cor(subset_data2)
+
+corr_melted <- melt(corr)
+
+# Plot the heatmap
+pheatmap(corr, 
+         color = colorRampPalette(c("blue", "white", "red"))(50), 
+         display_numbers = TRUE,   
+         fontsize_number = 10,    
+         main = "Correlation Heatmap with Values")
+
+
+#select categorical columns
+categorical_cols <- names(balanced_data)[sapply(balanced_data, is.character)]
+
+# Apply encoding
+for (col in categorical_cols) {
+  balanced_data[[col]] <- as.integer(factor(balanced_data[[col]]))
+}
+
+#Define Target Variables and Features
+X <- subset(balanced_data, select = -HadHeartAttack)
+y <- balanced_data$HadHeartAttack
+library(caret)
+
+set.seed(42)
+
+train_indices <- createDataPartition(y, p = 0.8, list = FALSE)
+X_train <- X[train_indices, ]
+X_test <- X[-train_indices, ]
+y_train <- y[train_indices]
+y_test <- y[-train_indices]
+
+#Fitting a Logistic Regression Model against all variables
+suppressWarnings({model <- train(x = X_train, y = y_train, method = "glm", family = "binomial")})
+predictions <- predict(model, newdata = X_test)
+
+accuracy <- mean(predictions == y_test)
+print(paste("Accuracy: ", accuracy))
+#Accuracy:  0.789204545454545
+
+conf_matrix <- confusionMatrix(predictions, y_test)
+print(conf_matrix)
+
+#Fitting a Logistic Regression Model with top 10 variables for importance
+#top 10 for variable importance
+X_2 <- balanced_data[,c('HadAngina', 'AgeCategory', 'ChestScan', 'HadStroke', 'DifficultyWalking', 'Sex', 'HadDiabetes', 'WeightInKilograms', 'GeneralHealth', 'HeightInMeters')]
+
+y <- balanced_data$HadHeartAttack
+
+set.seed(43)
+
+train_indices <- createDataPartition(y, p = 0.8, list = FALSE)
+X_train2 <- X_2[train_indices, ]
+X_test2 <- X_2[-train_indices, ]
+y_train2 <- y[train_indices]
+y_test2 <- y[-train_indices]
+
+suppressWarnings({model2 <- train(x = X_train2, y = y_train2, method = "glm", family = "binomial")})
+
+predictions2 <- predict(model2, newdata = X_test2)
+
+accuracy2 <- mean(predictions2 == y_test2)
+print(paste("Accuracy: ", accuracy2))
+#Accuracy:  0.790530303030303
+
+conf_matrix2 <- confusionMatrix(predictions2, y_test2)
+print(conf_matrix2)
+
+
+#Fitting a Logistic Regression Model with top 5 variables for importance
+#top 5 for variable importance
+X_3 <- balanced_data[,c('HadAngina', 'AgeCategory', 'ChestScan', 'HadStroke', 'DifficultyWalking')]
+
+y <- balanced_data$HadHeartAttack
+
+set.seed(43)
+
+train_indices <- createDataPartition(y, p = 0.8, list = FALSE)
+X_train3 <- X_3[train_indices, ]
+X_test3 <- X_3[-train_indices, ]
+y_train3 <- y[train_indices]
+y_test3 <- y[-train_indices]
+
+suppressWarnings({model3 <- train(x = X_train3, y = y_train3, method = "glm", family = "binomial")})
+
+predictions3 <- predict(model3, newdata = X_test3)
+
+accuracy3 <- mean(predictions3 == y_test3)
+print(paste("Accuracy: ", accuracy3))
+#Accuracy:  0.78030303030303
+
+conf_matrix3 <- confusionMatrix(predictions3, y_test3)
+print(conf_matrix3)
+
+
+#Fitted a Logistic Regression Model with only HadAngina to predict HadHeartAttack
+#Only HadAngina
+X_4 <- balanced_data[,c('HadAngina')]
+
+y <- balanced_data$HadHeartAttack
+
+set.seed(43)
+
+train_indices <- createDataPartition(y, p = 0.8, list = FALSE)
+X_train4 <- X_4[train_indices, ]
+X_test4 <- X_4[-train_indices, ]
+y_train4 <- y[train_indices]
+y_test4 <- y[-train_indices]
+
+suppressWarnings({model4 <- train(x = X_train4, y = y_train4, method = "glm", family = "binomial")})
+
+predictions4 <- predict(model4, newdata = X_test4)
+
+accuracy4 <- mean(predictions4 == y_test4)
+print(paste("Accuracy: ", accuracy4))
+#Accuracy:  0.734469696969697
+
+conf_matrix4 <- confusionMatrix(predictions4, y_test4)
+print(conf_matrix4)
+
+#Fitted a Logistic Regression model with all the variables except HadAngina to predict HadHeartAttack
+
+#Fit the model without 'HadAngina'
+X_5 <- subset(balanced_data, select=-c(HadAngina, HadHeartAttack))
+
+y <- balanced_data$HadHeartAttack
+
+set.seed(43)
+
+train_indices <- createDataPartition(y, p = 0.8, list = FALSE)
+X_train5 <- X_5[train_indices, ]
+X_test5 <- X_5[-train_indices, ]
+y_train5 <- y[train_indices]
+y_test5 <- y[-train_indices]
+
+suppressWarnings({model5 <- train(x = X_train5, y = y_train5, method = "glm", family = "binomial")})
+
+predictions5 <- predict(model5, newdata = X_test5)
+
+accuracy5 <- mean(predictions5 == y_test5)
+print(paste("Accuracy: ", accuracy5))
+#Accuracy:  0.750568181818182
+
+conf_matrix5 <- confusionMatrix(predictions5, y_test5)
+print(conf_matrix4)
+
+#Fitted a Logistic Regression model with top 5 variables except HadAngina to predict HadHeartAttack
+X_6 <- balanced_data[,c('AgeCategory', 'ChestScan', 'HadStroke', 'HadDiabetes', 'GeneralHealth')]
+
+y <- balanced_data$HadHeartAttack
+
+set.seed(43)
+
+train_indices <- createDataPartition(y, p = 0.8, list = FALSE)
+X_train6 <- X_6[train_indices, ]
+X_test6 <- X_6[-train_indices, ]
+y_train6 <- y[train_indices]
+y_test6 <- y[-train_indices]
+
+suppressWarnings({model6 <- train(x = X_train6, y = y_train6, method = "glm", family = "binomial")})
+
+predictions6 <- predict(model6, newdata = X_test6)
+
+accuracy6 <- mean(predictions6 == y_test6)
+print(paste("Accuracy: ", accuracy6))
+#Accuracy:  0.723106060606061
+
+conf_matrix6 <- confusionMatrix(predictions6, y_test6)
+print(conf_matrix6)
+
+#splitting the data set in male and females
+#Female = 1, Male = 2 
+female = balanced_data[balanced_data$Sex == 1, ]
+male = balanced_data[balanced_data$Sex == 2, ]
+dim(female)
+dim(male)
+
+
+#Fitting Logistic Regression for Female Dataset
+
+X_female <-  subset(female, select = -HadHeartAttack)
+
+y_female <- female$HadHeartAttack
+
+set.seed(43)
+
+train_indices <- createDataPartition(y_female, p = 0.8, list = FALSE)
+X_train <- X_female[train_indices, ]
+X_test <- X_female[-train_indices, ]
+y_train <- y_female[train_indices]
+y_test <- y_female[-train_indices]
+
+suppressWarnings({model_female <- train(x = X_train, y = y_train, method = "glm", family = "binomial")})
+
+predictions_female <- predict(model_female, newdata = X_test)
+
+accuracy_female <- mean(predictions_female == y_test)
+print(paste("Accuracy: ", accuracy_female))
+# Accuracy:  0.802013422818792   
+
+conf_matrix_female <- confusionMatrix(predictions_female, y_test)
+print(conf_matrix_female)
+
+
+#Fitting Logistic Regression for Male Dataset
+
+X_male <-  subset(male, select = -HadHeartAttack)
+
+y_male <- male$HadHeartAttack
+
+set.seed(43)
+
+train_indices <- createDataPartition(y_male, p = 0.8, list = FALSE)
+X_train <- X_male[train_indices, ]
+X_test <- X_male[-train_indices, ]
+y_train <- y_male[train_indices]
+y_test <- y_male[-train_indices]
+
+suppressWarnings({model_male <- train(x = X_train, y = y_train, method = "glm", family = "binomial")})
+
+predictions_male <- predict(model_male, newdata = X_test)
+
+accuracy_male <- mean(predictions_male == y_test)
+print(paste("Accuracy: ", accuracy_male))
+#Accuracy:  0.795854922279793
+
+conf_matrix_male <- confusionMatrix(predictions_male, y_test)
+print(conf_matrix_male)
+
+#Running Random Forest Regression for Variable Importance for Female
+
+rf_model_female <- randomForest(HadHeartAttack ~ ., data = female, importance = TRUE, mtry=6, ntree=100)
+
+importance_values_female <- importance(rf_model_female)
+importance_values_female
+sorted_by_accuracy_female <- importance_values_female[order(-importance_values_female[, "MeanDecreaseAccuracy"]), ]
+
+varImpPlot(rf_model_female, n.var = 10, main="Variable Importance for Female")
+
+
+#Running Random Forest Regression for Variable Importance for Male
+male$HadHeartAttack <-as.factor(male$HadHeartAttack)
+rf_model_male <- randomForest(HadHeartAttack ~ ., data = male, importance = TRUE, mtry=6, ntree=100)
+
+importance_values_male <- importance(rf_model_male)
+sorted_by_accuracy_male <- importance_values_male[order(-importance_values_male[, 1]), ]
+
+
+varImpPlot(rf_model_male, n.var=10, main="Variable Importance for Male") 
+
+#Bar Plot for male and female importance comparison 
+
+top_male <- head(rownames(sorted_by_accuracy_male), 10)
+
+top_female <- head(rownames(sorted_by_accuracy_female), 10)
+
+male_importance <- sorted_by_accuracy_male[seq(1, 10), "MeanDecreaseAccuracy"]
+
+female_importance <- sorted_by_accuracy_female[seq(1, 10), "MeanDecreaseAccuracy"]
+
+importance_data <- data.frame(
+  Feature = rep(c(top_male, top_female), each = 1),
+  Importance = c(male_importance, female_importance),
+  Gender = rep(c("Male", "Female"), each=10)
+)
+
+# Plot
+ggplot(importance_data, aes(x = reorder(Feature, Importance), y = Importance, fill = Gender)) + geom_bar(stat = "identity", position="dodge")+
+  labs(title="Top 10 Feature Importance Comaprison (Female vs Male)", x = "Feature", y = "Feature Decrease Accuracy") 
+
+
+#Hierarchical Clustering
+
+#Load required libraries for clustering
+library(cluster)
+
+
+balanced_subset <- balanced_data[,c('HadAngina', 'AgeCategory', 'ChestScan', 'HadStroke', 'DifficultyWalking', 'HadHeartAttack')]
+
+balanced_subset <- balanced_subset[ sample(1:nrow(balanced_subset), size = 75),]
+df_feature <- balanced_subset[, sapply(balanced_subset, is.numeric)]
+# Standardize the data (z-score normalization)
+df_feature <- scale(df_feature)
+
+#distance matrix
+distance_matrix <- dist(df_feature, method = "euclidean")
+
+# Perform hierarchical clustering 
+set.seed(123) 
+hc <- hclust(distance_matrix, method = "ward.D2")
+
+# Cut tree into clusters
+k <- 5
+clusters <- cutree(hc, k = k)
+
+balanced_subset$Cluster <- clusters
+
+library(dendextend)
+
+dend <- as.dendrogram(hc)
+
+has_heart_attack <- ifelse(balanced_subset$HadHeartAttack == 1, "red", "blue")
+
+dend <- dend %>% set("branches_k_color", k = k) %>%
+  set("labels_colors", has_heart_attack) %>%
+  set("labels_cex", 0.7)
+
+plot(dend, main= "Hierarchical Clustering with Heart Attack") 
+
+legend("topright", legend=c("Heart Attack", "No Heart Attack"), fill = c("red", "blue"))
+
+#Analyze proportion of HadHeartAttack within each cluster to understand how well the clusters separate individuals with and without heart attacks. 
+table(balanced_subset$Cluster, balanced_subset$HadHeartAttack)
+
+
+#Summary Statistic of Clusters 
+
+cluster_summary <- balanced_subset %>% 
+  mutate(HadHeartAttack = as.numeric(HadHeartAttack)) %>%
+  group_by(Cluster) %>% 
+  summarize(across(c(HadHeartAttack, HadAngina, ChestScan, HadStroke, DifficultyWalking, AgeCategory), mean))
+
+print(cluster_summary)
+
+#Cluster 4 has the highest rate of "HadHeartAttack" = 1.933333.
+
+
+
+
+
+
+
+
